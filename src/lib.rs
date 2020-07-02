@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum EditOp {
     DeleteLine { orig_line: usize },
@@ -11,9 +13,10 @@ pub fn diff(src: &str, dst: &str) -> Vec<EditOp> {
     let dst_splits: Vec<&str> = dst.split('\n').collect();
     let n = src_splits.len();
     let m = dst_splits.len();
-    let mut furthest_xs: Vec<Option<(usize, Vec<EditOp>)>> = vec![None; n + m + 1];
+    let mut furthest_xs: Vec<Option<usize>> = vec![None; n + m + 1];
+    let mut path = HashMap::new();
 
-    fn offset(n: usize, m: usize, i: isize) -> usize {
+    fn offset(m: usize, i: isize) -> usize {
         (i + m as isize + 1) as usize
     }
 
@@ -27,39 +30,31 @@ pub fn diff(src: &str, dst: &str) -> Vec<EditOp> {
                 break;
             }
 
-            let (start_x, start_y, op) = if d == 0 {
-                (0, 0, vec![])
+            let (start_x, start_y) = if d == 0 {
+                (0, 0)
             } else {
-                let (x, op) = if k == kmin {
-                    let (x, mut op) = furthest_xs[offset(n, m, k + 1)].as_ref().unwrap().clone();
-                    op.push(EditOp::InsertLine {
-                        orig_line: x,
-                        mod_line: (x as isize - k) as usize,
-                    });
-                    (x, op)
+                let x = if k == kmin {
+                    let x = furthest_xs[offset(m, k + 1)].unwrap();
+                    path.insert((x, k), (x, k + 1));
+                    x
                 } else if k == kmax {
-                    let (x, mut op) = furthest_xs[offset(n, m, k - 1)].as_ref().unwrap().clone();
-                    op.push(EditOp::DeleteLine { orig_line: x });
-                    (x + 1, op)
+                    let x = furthest_xs[offset(m, k - 1)].unwrap();
+                    path.insert((x + 1, k), (x, k - 1));
+                    x + 1
                 } else {
-                    let &(x1, ref op1) = furthest_xs[offset(n, m, k + 1)].as_ref().unwrap();
-                    let &(x2, ref op2) = furthest_xs[offset(n, m, k - 1)].as_ref().unwrap();
+                    let x1 = furthest_xs[offset(m, k + 1)].unwrap();
+                    let x2 = furthest_xs[offset(m, k - 1)].unwrap();
                     let x2 = x2 + 1;
 
                     if x1 > x2 {
-                        let mut op = op1.clone();
-                        op.push(EditOp::InsertLine {
-                            orig_line: x1,
-                            mod_line: (x1 as isize - k) as usize,
-                        });
-                        (x1, op.clone())
+                        path.insert((x1, k), (x1, k + 1));
+                        x1
                     } else {
-                        let mut op = op2.clone();
-                        op.push(EditOp::DeleteLine { orig_line: x2 });
-                        (x2, op.clone())
+                        path.insert((x2, k), (x2 - 1, k - 1));
+                        x2
                     }
                 };
-                (x, x as isize - k, op)
+                (x, x as isize - k)
             };
 
             if start_x > n || start_y > m as isize || start_y < 0 {
@@ -70,20 +65,44 @@ pub fn diff(src: &str, dst: &str) -> Vec<EditOp> {
 
             let (mut x, mut y) = (start_x, start_y);
 
-            while x + 1 <= n && y + 1 <= m && src_splits[x + 1] == src_splits[y + 1] {
+            while x + 1 <= n && y + 1 <= m && src_splits[x] == dst_splits[y] {
                 x += 1;
                 y += 1;
             }
 
-            furthest_xs[offset(n, m, k)] = Some((x, op));
+            furthest_xs[offset(m, k)] = Some(x);
+            if x != start_x {
+                path.insert((x, k), (start_x, k));
+            }
 
-            if x == m && y == m {
+            if x == n && y == m {
                 break 'outer;
             }
         }
     }
-    let (_, op) = furthest_xs[n + 1].take().unwrap();
-    op
+    let mut result = vec![];
+    let mut point = (n, n as isize - m as isize);
+
+    while point != (0, 0) {
+        let (x, k) = point;
+        let (x_next, k_next) = path[&point];
+        point = path[&point];
+
+        if k == k_next {
+            continue;
+        }
+
+        if x == x_next {
+            result.push(EditOp::InsertLine {
+                orig_line: x + 1,
+                mod_line: (x as isize - k) as usize,
+            })
+        } else {
+            result.push(EditOp::DeleteLine { orig_line: x })
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
