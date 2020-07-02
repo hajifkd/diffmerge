@@ -17,41 +17,52 @@ pub fn diff(src: &str, dst: &str) -> Vec<EditOp> {
     let mut path = HashMap::new();
 
     fn offset(m: usize, i: isize) -> usize {
-        (i + m as isize + 1) as usize
+        (i + m as isize) as usize
     }
 
-    'outer: for d in 0..=std::cmp::max(n, m) {
+    'outer: for d in 0..=(n + m) {
         let di = d as isize;
         let kmin = std::cmp::max(-di, -(m as isize));
         let kmax = std::cmp::min(di, n as isize);
-        for i in 0.. {
-            let k = kmin + 2 * i;
+        for i in (di + kmin + 1) / 2.. {
+            let k = -di + 2 * i;
             if k > kmax {
                 break;
             }
-
             let (start_x, start_y) = if d == 0 {
                 (0, 0)
             } else {
                 let x = if k == kmin {
-                    let x = furthest_xs[offset(m, k + 1)].unwrap();
-                    path.insert((x, k), (x, k + 1));
-                    x
-                } else if k == kmax {
-                    let x = furthest_xs[offset(m, k - 1)].unwrap();
-                    path.insert((x + 1, k), (x, k - 1));
-                    x + 1
-                } else {
-                    let x1 = furthest_xs[offset(m, k + 1)].unwrap();
-                    let x2 = furthest_xs[offset(m, k - 1)].unwrap();
-                    let x2 = x2 + 1;
-
-                    if x1 > x2 {
-                        path.insert((x1, k), (x1, k + 1));
-                        x1
+                    if let Some(x) = furthest_xs[offset(m, k + 1)] {
+                        path.insert((x, k), (x, k + 1));
+                        x
                     } else {
-                        path.insert((x2, k), (x2 - 1, k - 1));
-                        x2
+                        continue;
+                    }
+                } else if k == kmax {
+                    if let Some(x) = furthest_xs[offset(m, k - 1)] {
+                        path.insert((x + 1, k), (x, k - 1));
+                        x + 1
+                    } else {
+                        continue;
+                    }
+                } else {
+                    if let Some(x1) = furthest_xs[offset(m, k + 1)] {
+                        if let Some(x2) = furthest_xs[offset(m, k - 1)] {
+                            let x2 = x2 + 1;
+
+                            if x1 > x2 {
+                                path.insert((x1, k), (x1, k + 1));
+                                x1
+                            } else {
+                                path.insert((x2, k), (x2 - 1, k - 1));
+                                x2
+                            }
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
                     }
                 };
                 (x, x as isize - k)
@@ -107,8 +118,47 @@ pub fn diff(src: &str, dst: &str) -> Vec<EditOp> {
 
 #[cfg(test)]
 mod tests {
+    extern crate rand;
+    use crate::*;
+    use rand::prelude::*;
+    fn gen_rand_str_lines(line_max: usize) -> String {
+        let alphabets: Vec<_> = (b'a'..=b'z').map(char::from).collect();
+        (0..random::<usize>() % line_max)
+            .map(|i| alphabets[random::<usize>() % alphabets.len()])
+            .fold(String::new(), |mut acc, x| {
+                if acc.is_empty() {
+                    acc.push(x);
+                } else {
+                    acc.push('\n');
+                    acc.push(x);
+                }
+                acc
+            })
+    }
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_diff() {
+        for _ in 0..100 {
+            let src = gen_rand_str_lines(100);
+            let dst = gen_rand_str_lines(100);
+            let ops = diff(&src, &dst);
+            let mut src_lines: Vec<_> = src.split('\n').collect();
+            let dst_lines: Vec<_> = dst.split('\n').collect();
+
+            for op in ops {
+                match op {
+                    EditOp::DeleteLine { orig_line } => {
+                        src_lines.remove(orig_line - 1);
+                    }
+                    EditOp::InsertLine {
+                        orig_line,
+                        mod_line,
+                    } => {
+                        src_lines.insert(orig_line - 1, dst_lines[mod_line - 1]);
+                    }
+                }
+            }
+
+            assert_eq!(src_lines, dst_lines);
+        }
     }
 }
