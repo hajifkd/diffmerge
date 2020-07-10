@@ -25,6 +25,7 @@ impl EditOp {
                     orig_line: another_orig_line,
                     mod_line: another_mod_line,
                 } => {
+                    dbg!((self_mod_line, another_mod_line));
                     self_orig_line == another_orig_line
                         && self_lines[self_mod_line] == another_lines[another_mod_line]
                 }
@@ -34,6 +35,7 @@ impl EditOp {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum MergedLine<'a> {
     Line(&'a str),
     Conflict {
@@ -139,11 +141,11 @@ pub fn diff(src_lines: &[&str], dst_lines: &[&str]) -> Vec<EditOp> {
 
         if x == x_next {
             result.push(EditOp::InsertLine {
-                orig_line: x + 1,
-                mod_line: (x as isize - k) as usize,
+                orig_line: x,
+                mod_line: (x as isize - k) as usize - 1,
             })
         } else {
-            result.push(EditOp::DeleteLine { orig_line: x })
+            result.push(EditOp::DeleteLine { orig_line: x - 1 })
         }
     }
 
@@ -245,7 +247,7 @@ mod tests {
     fn gen_rand_str_lines(line_max: usize) -> String {
         let alphabets: Vec<_> = (b'a'..=b'z').map(char::from).collect();
         (0..random::<usize>() % line_max)
-            .map(|i| alphabets[random::<usize>() % alphabets.len()])
+            .map(|_| alphabets[random::<usize>() % alphabets.len()])
             .fold(String::new(), |mut acc, x| {
                 if acc.is_empty() {
                     acc.push(x);
@@ -268,13 +270,13 @@ mod tests {
             for op in ops {
                 match op {
                     EditOp::DeleteLine { orig_line } => {
-                        src_lines.remove(orig_line - 1);
+                        src_lines.remove(orig_line);
                     }
                     EditOp::InsertLine {
                         orig_line,
                         mod_line,
                     } => {
-                        src_lines.insert(orig_line - 1, dst_lines[mod_line - 1]);
+                        src_lines.insert(orig_line, dst_lines[mod_line]);
                     }
                 }
             }
