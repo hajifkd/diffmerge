@@ -43,6 +43,69 @@ pub enum MergedLine<'a> {
     },
 }
 
+impl<'a> MergedLine<'a> {
+    pub fn is_conflicted(&self) -> bool {
+        match self {
+            &MergedLine::Conflict { .. } => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Merge<'a> {
+    lines: Vec<MergedLine<'a>>,
+    merge_names: Option<(&'a str, &'a str)>,
+}
+
+impl<'a> Merge<'a> {
+    pub fn new(lines: Vec<MergedLine<'a>>) -> Self {
+        Merge {
+            lines,
+            merge_names: None,
+        }
+    }
+    pub fn is_successful(&self) -> bool {
+        self.lines.iter().all(|m| !m.is_conflicted())
+    }
+
+    pub fn set_names(&mut self, name1: &'a str, name2: &'a str) {
+        self.merge_names = Some((name1, name2));
+    }
+}
+
+impl<'a> std::fmt::Display for Merge<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, line) in self.lines.iter().enumerate() {
+            if i != 0 {
+                write!(f, "\n")?;
+            }
+            match line {
+                &MergedLine::Line(l) => {
+                    write!(f, "{}", l)?;
+                }
+                &MergedLine::Conflict {
+                    ref candidate1,
+                    ref candidate2,
+                } => {
+                    let (name1, name2) = self.merge_names.unwrap_or(("", ""));
+                    write!(f, "<<<<<<< {}\n", name1)?;
+                    for l1 in candidate1.iter() {
+                        write!(f, "{}\n", l1)?;
+                    }
+                    write!(f, "=======\n")?;
+                    for l2 in candidate2.iter() {
+                        write!(f, "{}\n", l2)?;
+                    }
+                    write!(f, ">>>>>>> {}", name2)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 // レーベンシュタイン距離を深さ優先でグリーディに求める
 // O((n + m) * d) see https://link.springer.com/article/10.1007/BF01840446
 pub fn diff(src_lines: &[&str], dst_lines: &[&str]) -> Vec<EditOp> {
@@ -169,7 +232,7 @@ fn collect_lines<'a>(
     result
 }
 
-pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Vec<MergedLine<'a>> {
+pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a> {
     let ans_lines: Vec<&str> = ancestor.split('\n').collect();
     let d1_lines: Vec<&str> = desc1.split('\n').collect();
     let d2_lines: Vec<&str> = desc2.split('\n').collect();
@@ -179,8 +242,6 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Vec<Merge
     let mut j_d2 = 0;
     let n_d1 = diff1.len();
     let n_d2 = diff2.len();
-
-    dbg!((&diff1, &diff2));
 
     let mut result = vec![];
 
@@ -238,7 +299,7 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Vec<Merge
             j_d2 += 1;
         }
     }
-    result
+    Merge::new(result)
 }
 
 #[cfg(test)]

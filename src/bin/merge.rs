@@ -1,26 +1,29 @@
 use diffmerge::merge;
 
 fn main() {
-    dbg!(merge(
-        "a
+        println!(
+                "{}",
+                merge(
+                        "a
 b
 c
 d
 e
 k
 f",
-        "a
+                        "a
 c
 d
 e1
 k
 fz",
-        "a
+                        "a
 c
 d
 e2
 k
 fz
 "
-    ));
+                )
+        );
 }
