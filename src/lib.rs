@@ -14,13 +14,6 @@ impl EditOp {
         }
     }
 
-    fn is_deletion(&self) -> bool {
-        match self {
-            &EditOp::DeleteLine { .. } => true,
-            _ => false,
-        }
-    }
-
     fn equal_as_op(&self, another: &Self, self_lines: &[&str], another_lines: &[&str]) -> bool {
         match self {
             &EditOp::DeleteLine { .. } => self == another,
@@ -218,25 +211,10 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Vec<Merge
                 let candidate1 = collect_lines(&d1_lines, &diff1, n_d1, i, &mut j_d1);
                 let candidate2 = collect_lines(&d2_lines, &diff2, n_d2, i, &mut j_d2);
 
-                // delete and insertions + delete should be compatible.
-                if (candidate1.len() == 0 /* diff1 is purely deletion */ && diff2[n_d2 - j_d2].is_deletion())
-                    || (candidate2.len() == 0 /* diff2 is purely deletion */ && diff1[n_d1 - j_d1].is_deletion())
-                {
-                    let modification = if candidate1.len() == 0 {
-                        candidate2
-                    } else {
-                        candidate1
-                    };
-
-                    for line in modification.into_iter() {
-                        result.push(MergedLine::Line(line));
-                    }
-                } else {
-                    result.push(MergedLine::Conflict {
-                        candidate1,
-                        candidate2,
-                    });
-                }
+                result.push(MergedLine::Conflict {
+                    candidate1,
+                    candidate2,
+                });
             }
         }
 
