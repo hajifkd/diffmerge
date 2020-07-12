@@ -245,11 +245,12 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a>
 
     let mut result = vec![];
 
-    for i in 0..ans_lines.len() {
-        if j_d1 >= n_d1
-            || j_d2 >= n_d2
-            || diff1[n_d1 - j_d1 - 1].orig_line() != i
-            || diff2[n_d2 - j_d2 - 1].orig_line() != i
+    dbg!(&diff2);
+
+    for i in 0..=ans_lines.len() {
+        if i < ans_lines.len()
+            && (j_d1 >= n_d1 || diff1[n_d1 - j_d1 - 1].orig_line() != i)
+            && (j_d2 >= n_d2 || diff2[n_d2 - j_d2 - 1].orig_line() != i)
         {
             result.push(MergedLine::Line(ans_lines[i]));
             continue;
@@ -346,5 +347,32 @@ mod tests {
 
             assert_eq!(src_lines, dst_lines);
         }
+    }
+
+    #[test]
+    fn test_merge() {
+        let merged = merge(
+            "a\nb\nc\nd\ne\nf\ng\nh",
+            "a\nc\nd\ne\nz\ng\nh",
+            "a\nb\nc\ny\ne\nz\ng\nh\ni\nj\nk",
+        );
+        assert_eq!(merged.is_successful(), true);
+        assert_eq!(format!("{}", merged), "a\nc\ny\ne\nz\ng\nh\ni\nj\nk");
+
+        let mut merged = merge(
+            "a\nb\nc\nd\ne\nf\ng\nh",
+            "a\nz\nc\nw\ny\nq\ng\nh\ni\nj\nk\nl\nn\nm",
+            "a\nx\nc\nw\ny\nq\ng\nh\ni\nj\nc\nl\nn\nm",
+        );
+        assert_eq!(merged.is_successful(), false);
+        assert_eq!(
+            format!("{}", merged),
+            "a\n<<<<<<< \nz\n=======\nx\n>>>>>>> \nc\nw\ny\nq\ng\nh\ni\nj\n<<<<<<< \nk\nl\nn\nm\n=======\nc\nl\nn\nm\n>>>>>>> "
+        );
+        merged.set_names("branch1", "branch2");
+        assert_eq!(
+            format!("{}", merged),
+            "a\n<<<<<<< branch1\nz\n=======\nx\n>>>>>>> branch2\nc\nw\ny\nq\ng\nh\ni\nj\n<<<<<<< branch1\nk\nl\nn\nm\n=======\nc\nl\nn\nm\n>>>>>>> branch2"
+        );
     }
 }
