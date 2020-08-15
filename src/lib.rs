@@ -245,8 +245,6 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a>
     let mut j_d2 = 0;
     let n_d1 = diff1.len();
     let n_d2 = diff2.len();
-    dbg!(&diff1);
-    dbg!(&diff2);
 
     let mut result = vec![];
 
@@ -322,7 +320,6 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a>
         }
     }
 
-    dbg!(&result);
     Merge::new(result)
 }
 
