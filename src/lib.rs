@@ -220,16 +220,19 @@ fn collect_lines<'a>(
     n: usize,
     i: usize,
     j: &mut usize,
-) -> Vec<&'a str> {
+) -> (bool, Vec<&'a str>) {
     let mut result = vec![];
+    let mut delete_line = false;
     while *j < n && diff[n - *j - 1].orig_line() == i {
         match diff[n - *j - 1] {
             EditOp::InsertLine { mod_line, .. } => result.push(lines[mod_line]),
-            _ => (),
+            EditOp::DeleteLine { .. } => {
+                delete_line = true;
+            }
         }
         *j += 1;
     }
-    result
+    (delete_line, result)
 }
 
 pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a> {
@@ -242,64 +245,84 @@ pub fn merge<'a>(ancestor: &'a str, desc1: &'a str, desc2: &'a str) -> Merge<'a>
     let mut j_d2 = 0;
     let n_d1 = diff1.len();
     let n_d2 = diff2.len();
+    dbg!(&diff1);
+    dbg!(&diff2);
 
     let mut result = vec![];
 
-    dbg!(&diff2);
-
-    for i in 0..=ans_lines.len() {
-        if i < ans_lines.len()
-            && (j_d1 >= n_d1 || diff1[n_d1 - j_d1 - 1].orig_line() != i)
-            && (j_d2 >= n_d2 || diff2[n_d2 - j_d2 - 1].orig_line() != i)
-        {
-            result.push(MergedLine::Line(ans_lines[i]));
-            continue;
-        }
+    'ans_loop: for i in 0..=ans_lines.len() {
         while j_d1 < n_d1
             && j_d2 < n_d2
             && diff1[n_d1 - j_d1 - 1].orig_line() == i
             && diff2[n_d2 - j_d2 - 1].orig_line() == i
         {
             if diff1[n_d1 - j_d1 - 1].equal_as_op(&diff2[n_d2 - j_d2 - 1], &d1_lines, &d2_lines) {
-                match diff1[n_d1 - j_d1 - 1] {
+                j_d1 += 1;
+                j_d2 += 1;
+                match diff1[n_d1 - j_d1] {
                     EditOp::InsertLine { mod_line, .. } => {
                         result.push(MergedLine::Line(d1_lines[mod_line]));
                     }
-                    _ => (),
+                    EditOp::DeleteLine { .. } => {
+                        continue 'ans_loop;
+                    }
                 }
-                j_d1 += 1;
-                j_d2 += 1;
             } else {
-                let candidate1 = collect_lines(&d1_lines, &diff1, n_d1, i, &mut j_d1);
-                let candidate2 = collect_lines(&d2_lines, &diff2, n_d2, i, &mut j_d2);
+                let (d1, mut candidate1) = collect_lines(&d1_lines, &diff1, n_d1, i, &mut j_d1);
+                let (d2, mut candidate2) = collect_lines(&d2_lines, &diff2, n_d2, i, &mut j_d2);
+
+                if d1 != d2 {
+                    if d1 {
+                        candidate2.push(ans_lines[i]);
+                    } else {
+                        candidate1.push(ans_lines[i]);
+                    }
+                }
 
                 result.push(MergedLine::Conflict {
                     candidate1,
                     candidate2,
                 });
+
+                if d1 || d2 {
+                    continue 'ans_loop;
+                }
             }
         }
 
         while j_d1 < n_d1 && diff1[n_d1 - j_d1 - 1].orig_line() == i {
-            match diff1[n_d1 - j_d1 - 1] {
+            j_d1 += 1;
+            match diff1[n_d1 - j_d1] {
                 EditOp::InsertLine { mod_line, .. } => {
                     result.push(MergedLine::Line(d1_lines[mod_line]));
                 }
-                _ => (),
+                EditOp::DeleteLine { .. } => {
+                    continue 'ans_loop;
+                }
             }
-            j_d1 += 1;
         }
 
         while j_d2 < n_d2 && diff2[n_d2 - j_d2 - 1].orig_line() == i {
-            match diff2[n_d2 - j_d2 - 1] {
+            j_d2 += 1;
+            match diff2[n_d2 - j_d2] {
                 EditOp::InsertLine { mod_line, .. } => {
                     result.push(MergedLine::Line(d2_lines[mod_line]));
                 }
-                _ => (),
+                EditOp::DeleteLine { .. } => {
+                    continue 'ans_loop;
+                }
             }
-            j_d2 += 1;
+        }
+
+        if i < ans_lines.len()
+            && (j_d1 >= n_d1 || diff1[n_d1 - j_d1 - 1].orig_line() != i)
+            && (j_d2 >= n_d2 || diff2[n_d2 - j_d2 - 1].orig_line() != i)
+        {
+            result.push(MergedLine::Line(ans_lines[i]));
         }
     }
+
+    dbg!(&result);
     Merge::new(result)
 }
 
@@ -351,6 +374,14 @@ mod tests {
 
     #[test]
     fn test_merge() {
+        let merged = merge(
+            "1\n2\n3\n4\n5\n6\n7\n8\n",
+            "1\n2\n2\n2\n3\n5\n6\n7\n8\n",
+            "1\n2\n3\n4\n5\n6\n6\n6\n6\n8\n",
+        );
+        assert_eq!(merged.is_successful(), true);
+        assert_eq!(format!("{}", merged), "1\n2\n2\n2\n3\n5\n6\n6\n6\n6\n8\n");
+
         let merged = merge(
             "a\nb\nc\nd\ne\nf\ng\nh",
             "a\nc\nd\ne\nz\ng\nh",
